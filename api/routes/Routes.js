@@ -1,9 +1,13 @@
 import express from 'express';
-import { verifyToken } from "../middleware/authMiddleware.js";
-import { authorizeRoles } from "../middleware/roleMiddleware.js";
-import { getDashboardData, getUsersData, addUser, deleteUser, updateUser, searchUser } from '../controllers/superAdminController.js';
+import { verifyToken } from "../middleware/verifyToken.js";
+import { authorizeRoles } from "../middleware/roleVerify.js";
+import { login, signup } from '../controllers/TodoController.js';
 
 const router = express.Router();
+
+    router.post('/login', login)
+    router.post('signup', signup)
+    
 
 // router.get('/admin-dashboard', verifyToken, authorizeRoles("superadmin"), getDashboardData);
 // router.get('/users', verifyToken, authorizeRoles("superadmin"), getUsersData);
