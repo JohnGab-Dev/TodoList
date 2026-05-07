@@ -1,11 +1,146 @@
-import db from '../config/dbcon.js';
 import bcrypt from 'bcrypt';
 import jwt from "jsonwebtoken";
+import db from '../config/dbcon.js';
 
-export const login = async (req, res) => {
-  const { email, password } = req.body; 
+export async function getTodos(req, res) {
+  try {
+    const userId = req.user.id;
+
     const [rows] = await db.execute(
-      'SELECT * FROM users WHERE email = ?',
+      "SELECT * FROM todos WHERE userId = ?",
+      [userId]
+    );
+
+    const [[totalTask]] = await db.execute(
+      "SELECT COUNT(*) as total FROM todos WHERE userId = ?",
+      [userId]
+    );
+
+    const [[pendingTask]] = await db.execute(
+      "SELECT COUNT(*) as pending FROM todos WHERE userId = ? AND status = ?",
+      [userId, "Pending"]
+    );
+
+    const [[completedTask]] = await db.execute(
+      "SELECT COUNT(*) as completed FROM todos WHERE userId = ? AND status = ?",
+      [userId, "Completed"]
+    );
+
+    return res.status(200).json({
+      data: rows,
+      total_tasks: totalTask.total,
+      total_pending: pendingTask.pending,
+      total_completed: completedTask.completed,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+}
+export async function addTodo(req, res) {
+    try {
+        const userId = req.user.id;
+
+        const { task, status, priority, dueDate } = req.body;
+
+        const [result] = await db.execute(
+        "INSERT INTO todos (userId, task, status, priority, due_date) VALUES (?, ?, ?, ?, ?)",
+        [userId, task, status, priority, dueDate]
+        );
+
+        return res.status(200).json({
+            message: "Todo created successfully",
+            todoId: result.insertId,
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+        message: error.message,
+        });
+    }
+}
+
+export async function editTodo(req, res) {
+    try {
+        const taskId = req.query.id;
+
+        const { task, status, priority, dueDate } = req.body;
+
+        const [result] = await db.execute(
+        "UPDATE todos SET task = ?, status = ?, priority = ?, due_date = ? WHERE id = ?",
+        [task, status, priority, dueDate, taskId]
+        );
+
+        if (result.affectedRows === 0) {
+        return res.status(404).json({
+            message: "Todo not found",
+        });
+        }
+
+        return res.status(200).json({
+        message: "Todo updated successfully",
+        });
+    } catch (error) {
+        return res.status(500).json({
+        message: error.message,
+        });
+    }
+}
+
+
+export async function deleteTodo(req, res){
+    try {
+        const taskId = req.query.id;
+
+        const [result] = await db.execute('DELETE FROM todos WHERE id = ?',
+            [taskId]
+        )
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Todo not found",
+            });
+        }
+        return res.status(200).json({
+         message: "Todo deleted successfully",
+        });
+       
+    } catch (error) {
+        res.status(500).json({ message: "Something went wrong" });
+    }
+}
+
+export async function signup(req, res){
+    const { name, email, password, confirmPassword } = req.body; 
+
+    const [existingUser] = await db.execute(
+        'SELECT * FROM user WHERE email = ?',
+        [email]
+    )
+
+    if(existingUser.length > 0){
+        return res.status(500).json({ message: 'Email already in use' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const [result] = await db.execute(
+        'INSERT INTO user (name, email, password) VALUES (?, ?, ?)',
+        [name, email, hashedPassword]
+    );
+
+    if(!result.insertId){
+        return res.status(500).json({ message: 'Error creating user'});
+    }
+
+    return res.status(200).json({ message: 'User created successfully' });
+}
+
+export async function login(req, res){
+    const { email, password } = req.body; 
+    const [rows] = await db.execute(
+      'SELECT * FROM user WHERE email = ?',
       [email]
     );
 
@@ -21,187 +156,18 @@ export const login = async (req, res) => {
     const token = jwt.sign(
         {
             id: rows[0].id,
+            name: rows[0].name,
             email: rows[0].email,
-            role: rows[0].role
         },
         process.env.JWT_SECRET,
-        { expiresIn: '12h' }
-    );  
-    return res.status(200).json({ token, role: rows[0].role, name: rows[0].name, message: 'Login successful' });
-}
+        { expiresIn: '2h' }
+    ); 
+    
+    const user = {
+        id: rows[0].id,
+        name: rows[0].name,
+        email: rows[0].email,   
+    };
 
-export const signup = async (req, res) => {
-  const { name, email, password, confirmPassword, role } = req.body; 
-
-  if (!name || !email || !password || !confirmPassword || !role) {
-      return res.status(400).json({
-        message: "All fields are required"
-      });
-    }
-    const [existingUser] = await db.execute(
-        'SELECT * FROM users WHERE email = ?',
-        [email]
-    )
-
-    if(existingUser.length > 0){
-        return res.status(409).json({ message: 'Email already in use' });
-    }
-
-    if(password !== confirmPassword){
-        return res.status(400).json({ message: 'Passwords do not match' });
-    }
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const [result] = await db.execute(
-        'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-        [name, email, hashedPassword, role]
-    );
-
-    if(!result.insertId){
-        return res.status(500).json({ message: 'Error creating user'});
-    }
-
-    return res.status(201).json({ message: 'User created successfully' });
-}
-
-export const getDashboardData = async (req, res) => {
-    try {
-        const [rows] = await db.execute(
-            'SELECT * FROM users WHERE role = ?', ["superadmin"]
-        )
-        return res.status(200).json({ data: rows });
-    } catch (error) {
-        return res.status(500).json({ message: "Error fetching dashboard data", error });
-    }
-}
-
-export const getUsersData = async (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const offset = (page - 1) * 10;
-    try {
-        const [rows] = await db.execute(
-            "SELECT * FROM users WHERE role != ? ORDER BY name ASC LIMIT 10 OFFSET ?", ["superadmin", offset]
-        )
-        const [countRows] = await db.execute(
-            "SELECT COUNT(*) as count FROM users"
-        )
-        const totalCount = countRows[0].count;
-        return res.status(200).json({ data: rows, count: totalCount });
-    } catch (err) {
-        return res.status(500).json({message: "Error fetching users data" + err});
-    }
-}
-
-export const addUser = async (req, res) => {
-    try{
-        const { name, email, password, confirmPassword, role } = req.body; 
-
-        if (!name || !email || !password || !confirmPassword || !role) {
-            return res.status(400).json({
-                message: "All fields are required"
-            });
-            }
-            const [existingUser] = await db.execute(
-                'SELECT * FROM users WHERE email = ?',
-                [email]
-            )
-
-            if(existingUser.length > 0){
-                return res.status(409).json({ message: 'Email already in use' });
-            }
-
-            if(password !== confirmPassword){
-                return res.status(400).json({ message: 'Passwords do not match' });
-            }
-            const hashedPassword = await bcrypt.hash(password, 10);
-
-            const [result] = await db.execute(
-                'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
-                [name, email, hashedPassword, role]
-            );
-
-            if(!result.insertId){
-                return res.status(500).json({ message: 'Error creating user'});
-            }
-
-            return res.status(201).json({ message: 'User created successfully' });
-    } catch (err){
-        return res.status(500).json({message: 'User add failed || ' + err.message})
-    }
-}
-
-export const deleteUser = async (req, res) => {
-    const id = req.query.id;
-
-    try{
-        await db.execute(
-            "DELETE FROM users WHERE id = ?", [id]
-        )
-        return res.status(200).json({message: "User account delete successfully"})
-    }catch(error){
-        console.error(error);
-        return res.status(500).json({message: "Delete Failed!"})
-    }
-}
-
-export const updateUser = async (req, res) => {
-  try {
-    const { email, name, role, password } = req.body;
-    const { id } = req.query;
-
-    if (!email || !name || !role) {
-      return res.status(400).json({
-        message: "Email, name, and role are required",
-      });
-    }
-
-    const [emailExists] = await db.execute(
-      "SELECT id FROM users WHERE email = ? AND id != ?",
-      [email, id]
-    );
-
-    if (emailExists.length > 0) {
-      return res.status(422).json({
-        message: "Email already used. Try another.",
-      });
-    }
-
-    let query = "UPDATE users SET email = ?, name = ?, role = ?";
-    const params = [email, name, role];
-
-    if (password && password.trim() !== "") {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      query += ", password = ?";
-      params.push(hashedPassword);
-    }
-
-    query += " WHERE id = ?";
-    params.push(id);
-
-    await db.execute(query, params);
-
-    return res.status(200).json({
-      message: "User account updated successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      message: "Failed to update user account",
-    });
-  }
-};
-
-
-export const searchUser = async (req, res) => {
-    const search = req.query.search;
-    const searchTerm = `%${search}%`;
-    try{
-        const [rows] = await db.execute(
-            "SELECT * FROM users WHERE email like ? OR name like ? OR role like ?", [searchTerm, searchTerm, searchTerm]
-        )
-        return res.status(200).json({data: rows})
-    }catch(error){
-        console.error(error);
-        return res.status(500).json({message: "Something went wrong in filter, try again"})
-    }
+    return res.status(200).json({ token, user, message: 'Login successful' });
 }
