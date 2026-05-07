@@ -60,10 +60,12 @@ function LandingPage() {
             </div>
 
             <div className="flex flex-wrap gap-4">
-              <Button size="lg" className="rounded-2xl">
-                Start Now
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+                <Link to='/signup'>
+                  <Button size="lg" className="rounded-2xl">
+                    Start Now
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
 
               <Button
                 size="lg"
@@ -207,9 +209,10 @@ function LandingPage() {
               todo management experience.
             </p>
 
-            <Button size="lg" className="rounded-2xl">
-              Get Started Free
-            </Button>
+            <Link to="/signup">
+              <Button size="lg" className="rounded-2xl">
+                Get Started Free
+              </Button></Link>
           </CardContent>
         </Card>
       </section>
